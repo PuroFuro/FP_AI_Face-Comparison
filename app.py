@@ -54,10 +54,10 @@ def compare_faces(img1_path, img2_path):
         result = DeepFace.verify(
             img1_path=img1_path, 
             img2_path=img2_path, 
-            model_name="VGG-Face", 
-            distance_metric="cosine",
-            enforce_detection=False,  
-            detector_backend="opencv"  
+            model_name=model_name,
+            distance_metric=distance_metric,
+            enforce_detection=False,
+            detector_backend=detector_backend
         )
         return result
     except FileNotFoundError as e:
@@ -82,24 +82,56 @@ def display_results(comparison_result):
             
             similarity = max(0, 100 - (distance * 100))
             
+            # Custom HTML for the similarity bar
+            similarity_color = f"rgb({int(255 * (1 - similarity/100))}, {int(255 * similarity/100)}, 0)"
+            similarity_bar_html = f"""
+                <div style="margin-bottom: 20px;">
+                    <div style="width: 100%; background-color: #f0f0f0; height: 30px; border-radius: 15px; overflow: hidden;">
+                        <div style="width: {similarity}%; background-color: {similarity_color}; height: 100%; 
+                             transition: width 0.5s ease-out;">
+                        </div>
+                    </div>
+                    <div style="text-align: center; font-size: 1.5em; margin-top: 10px;">
+                        Similarity: {similarity:.1f}%
+                    </div>
+                </div>
+            """
+            st.markdown(similarity_bar_html, unsafe_allow_html=True)
+            
             col1, col2 = st.columns(2)
             
             with col1:
-                st.metric("Similarity", f"{similarity:.2f}%")
                 st.metric("Distance", f"{distance:.4f}")
+                st.metric("Threshold", f"{threshold:.4f}")
             
             with col2:
-                st.metric("Threshold", f"{threshold:.4f}")
                 match_text = "Match" if verified else "No Match"
                 match_color = "green" if verified else "red"
-                st.markdown(f"<h3 style='color: {match_color};'>{match_text}</h3>", unsafe_allow_html=True)
-                
-            st.markdown(f"**Model used**: {model}")
+                st.markdown(
+                    f"""
+                    <div style="height: 100%; display: flex; align-items: center; justify-content: center;">
+                        <h1 style="color: {match_color}; font-size: 3em; text-align: center;">
+                            {match_text}
+                        </h1>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+            
+            st.markdown(f"""
+            <div style="text-align: center; padding: 20px;">
+                <span style="background-color: #f0f2f6; padding: 10px; border-radius: 10px;">
+                    <strong>Model used</strong>: {model}, 
+                    <strong>Face Detector</strong>: {detector_backend}
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
             
             st.info("""
             **How to interpret:**
-            - Lower distance means higher similarity
-            - If distance is below threshold, images are considered a match
+            - Higher similarity percentage indicates closer match
+            - Green bar indicates higher similarity, red indicates lower
+            - Distance below threshold is considered a match
             """)
 
 # Sidebar for navigation
@@ -111,6 +143,27 @@ with st.sidebar:
         "Comparison Mode",
         ["Image to Image", "Webcam to Image"],
         key="comparison_mode"
+    )
+    
+    st.markdown("---")
+    st.subheader("Model Settings")
+    
+    model_name = st.selectbox(
+        "Face Recognition Model",
+        ["VGG-Face", "Facenet512", "ArcFace", "SFace"],
+        help="Select the model to use for face recognition. Different models may perform better in different scenarios."
+    )
+    
+    distance_metric = st.selectbox(
+        "Distance Metric",
+        ["cosine", "euclidean", "euclidean_l2"],
+        help="Method used to calculate the similarity between faces. Lower distance means higher similarity."
+    )
+    
+    detector_backend = st.selectbox(
+        "Face Detector",
+        ["opencv", "ssd", "mtcnn", "retinaface"],
+        help="Method used to detect faces in images. Choose based on accuracy vs speed trade-off."
     )
 
 # Main content based on mode selection
@@ -196,10 +249,29 @@ with st.expander("About this app"):
     This application uses DeepFace library to compare two face images and determine their similarity.
     
     **Features:**
-    - Face verification using VGG-Face model
-    - Cosine similarity metric for comparison
-    - Similarity percentage calculation
-    - Multiple comparison modes: Image to Image and Webcam to Image
+    - Multiple face recognition models:
+        - VGG-Face: Traditional and reliable
+        - Facenet512: Google's deep learning model
+        - ArcFace: State-of-the-art accuracy
+        - SFace: Lightweight and fast
     
-    Upload clear face images or use your webcam for the best results.
+    - Multiple distance metrics:
+        - Cosine: Angular difference between face features
+        - Euclidean: Direct distance between face features
+        - Euclidean L2: Normalized euclidean distance
+    
+    - Multiple face detectors:
+        - OpenCV: Fast but basic
+        - SSD: Single Shot Detector, good for multiple faces
+        - MTCNN: Multi-task Cascaded CNN, very accurate
+        - RetinaFace: State-of-the-art accuracy
+    
+    - Multiple comparison modes: 
+        - Image to Image
+        - Webcam to Image
+    
+    For best results:
+    1. Upload clear face images or use good lighting with webcam
+    2. Try different models if one doesn't work well
+    3. Experiment with different distance metrics for better accuracy
     """)
