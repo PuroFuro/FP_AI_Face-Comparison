@@ -13,9 +13,6 @@ st.set_page_config(
 )
 
 st.title("Face Similarity Comparison")
-st.markdown("Upload two face images to check their similarity.")
-
-col1, col2 = st.columns(2)
 
 def load_image(image_file):
     if image_file is not None:
@@ -23,21 +20,11 @@ def load_image(image_file):
         return img
     return None
 
-with col1:
-    st.subheader("First Image")
-    image_file1 = st.file_uploader("Upload first face image", type=["jpg", "jpeg", "png"], key="img1")
-    if image_file1 is not None:
-        image1 = load_image(image_file1)
-        st.image(image1, caption="Image 1", use_container_width=True)
-
-with col2:
-    st.subheader("Second Image")
-    image_file2 = st.file_uploader("Upload second face image", type=["jpg", "jpeg", "png"], key="img2")
-    if image_file2 is not None:
-        image2 = load_image(image_file2)
-        st.image(image2, caption="Image 2", use_container_width=True)
-
-result_container = st.container()
+def capture_image():
+    img_file_buffer = st.camera_input("Take a picture")
+    if img_file_buffer is not None:
+        return img_file_buffer
+    return None
 
 def compare_faces(img1_path, img2_path):
     try:
@@ -84,54 +71,125 @@ def compare_faces(img1_path, img2_path):
         st.info("Try with different images or ensure faces are clearly visible in both photos.")
         return None
 
-if st.button("Compare Faces", type="primary"):
-    if image_file1 is not None and image_file2 is not None:
-        with st.spinner("Comparing faces..."):
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp1:
-                tmp1.write(image_file1.getvalue())
-                img1_path = tmp1.name
+def display_results(comparison_result):
+    if comparison_result:
+        with result_container:
+            st.subheader("Comparison Results")
+            verified = comparison_result["verified"]
+            distance = comparison_result["distance"]
+            threshold = comparison_result["threshold"]
+            model = comparison_result["model"]
+            
+            similarity = max(0, 100 - (distance * 100))
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.metric("Similarity", f"{similarity:.2f}%")
+                st.metric("Distance", f"{distance:.4f}")
+            
+            with col2:
+                st.metric("Threshold", f"{threshold:.4f}")
+                match_text = "Match" if verified else "No Match"
+                match_color = "green" if verified else "red"
+                st.markdown(f"<h3 style='color: {match_color};'>{match_text}</h3>", unsafe_allow_html=True)
                 
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp2:
-                tmp2.write(image_file2.getvalue())
-                img2_path = tmp2.name
-                
-            comparison_result = compare_faces(img1_path, img2_path)
+            st.markdown(f"**Model used**: {model}")
+            
+            st.info("""
+            **How to interpret:**
+            - Lower distance means higher similarity
+            - If distance is below threshold, images are considered a match
+            """)
 
-            os.unlink(img1_path)
-            os.unlink(img2_path)
+# Sidebar for navigation
+with st.sidebar:
+    st.header("Face Comparison")
+    st.markdown("A tool to check similarity between two face images")
+    
+    comparison_mode = st.radio(
+        "Comparison Mode",
+        ["Image to Image", "Webcam to Image"],
+        key="comparison_mode"
+    )
 
-            if comparison_result:
-                with result_container:
-                    st.subheader("Comparison Results")
+# Main content based on mode selection
+if comparison_mode == "Image to Image":
+    st.markdown("Upload two face images to check their similarity.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("First Image")
+        image_file1 = st.file_uploader("Upload first face image", type=["jpg", "jpeg", "png"], key="img1")
+        if image_file1 is not None:
+            image1 = load_image(image_file1)
+            st.image(image1, caption="Image 1", use_container_width=True)
 
-                    verified = comparison_result["verified"]
-                    distance = comparison_result["distance"]
-                    threshold = comparison_result["threshold"]
-                    model = comparison_result["model"]
+    with col2:
+        st.subheader("Second Image")
+        image_file2 = st.file_uploader("Upload second face image", type=["jpg", "jpeg", "png"], key="img2")
+        if image_file2 is not None:
+            image2 = load_image(image_file2)
+            st.image(image2, caption="Image 2", use_container_width=True)
+
+    # Create result container for image to image mode
+    result_container = st.container()
+    
+    if st.button("Compare Faces", type="primary"):
+        if image_file1 is not None and image_file2 is not None:
+            with st.spinner("Comparing faces..."):
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp1:
+                    tmp1.write(image_file1.getvalue())
+                    img1_path = tmp1.name
                     
-                    similarity = max(0, 100 - (distance * 100))
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp2:
+                    tmp2.write(image_file2.getvalue())
+                    img2_path = tmp2.name
                     
-                    col1, col2 = st.columns(2)
+                comparison_result = compare_faces(img1_path, img2_path)
+                os.unlink(img1_path)
+                os.unlink(img2_path)
+                display_results(comparison_result)
+        else:
+            st.warning("Please upload both images first.")
+
+else:  # Webcam to Image mode
+    st.markdown("Capture a photo with your webcam and compare it with an uploaded image.")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Webcam Capture")
+        webcam_image = capture_image()
+        
+    with col2:
+        st.subheader("Reference Image")
+        reference_image = st.file_uploader("Upload reference image", type=["jpg", "jpeg", "png"], key="ref_img")
+        if reference_image is not None:
+            image_ref = load_image(reference_image)
+            st.image(image_ref, caption="Reference Image", use_container_width=True)
+    
+    # Create result container for webcam mode
+    result_container = st.container()
+    
+    if st.button("Compare with Reference Image", type="primary"):
+        if webcam_image is not None and reference_image is not None:
+            with st.spinner("Comparing faces..."):
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp1:
+                    tmp1.write(webcam_image.getvalue())
+                    webcam_path = tmp1.name
                     
-                    with col1:
-                        st.metric("Similarity", f"{similarity:.2f}%")
-                        st.metric("Distance", f"{distance:.4f}")
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp2:
+                    tmp2.write(reference_image.getvalue())
+                    ref_path = tmp2.name
                     
-                    with col2:
-                        st.metric("Threshold", f"{threshold:.4f}")
-                        match_text = "Match" if verified else "No Match"
-                        match_color = "green" if verified else "red"
-                        st.markdown(f"<h3 style='color: {match_color};'>{match_text}</h3>", unsafe_allow_html=True)
-                        
-                    st.markdown(f"**Model used**: {model}")
-                    
-                    st.info("""
-                    **How to interpret:**
-                    - Lower distance means higher similarity
-                    - If distance is below threshold, images are considered a match
-                    """)
-    else:
-        st.warning("Please upload both images first.")
+                comparison_result = compare_faces(webcam_path, ref_path)
+                os.unlink(webcam_path)
+                os.unlink(ref_path)
+                display_results(comparison_result)
+        else:
+            st.warning("Please capture a photo and upload a reference image first.")
 
 with st.expander("About this app"):
     st.write("""
@@ -141,10 +199,7 @@ with st.expander("About this app"):
     - Face verification using VGG-Face model
     - Cosine similarity metric for comparison
     - Similarity percentage calculation
+    - Multiple comparison modes: Image to Image and Webcam to Image
     
-    Upload two clear face images for the best results.
+    Upload clear face images or use your webcam for the best results.
     """)
-
-with st.sidebar:
-    st.header("Face Comparison")
-    st.markdown("A tool to check similarity between two face images")
